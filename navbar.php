@@ -3,7 +3,9 @@
     <a class="navbar-brand" href="index.php">🧾 POS Simple</a>
     <div class="navbar-nav">
       <a class="nav-link" href="index.php">Achat</a>
+      <a class="nav-link" href="purchases_list.php">Liste Achats</a>
       <a class="nav-link" href="add_sale.php">Vente</a>
+      <a class="nav-link" href="sales_list.php">Liste Ventes</a>
       <a class="nav-link" href="stock.php">Stock</a>
     </div>
   </div>
