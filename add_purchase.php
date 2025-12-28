@@ -1,41 +1,93 @@
 <?php
 require 'db.php';
 
-$name = $_POST['name'];
-$purchase_price = $_POST['purchase_price'];
-$sale_price = $_POST['sale_price'];
-$quantity = $_POST['quantity'];
-
-$pdo->beginTransaction();
-
-$stmt = $pdo->prepare("SELECT id, stock FROM products WHERE name=?");
-$stmt->execute([$name]);
-$product = $stmt->fetch();
-
-if ($product) {
-    $pdo->prepare("
-        UPDATE products SET 
-        stock = stock + ?, 
-        purchase_price=?, 
-        sale_price=? 
-        WHERE id=?
-    ")->execute([$quantity, $purchase_price, $sale_price, $product['id']]);
-
-    $product_id = $product['id'];
-} else {
-    $pdo->prepare("
-        INSERT INTO products (name,purchase_price,sale_price,stock)
-        VALUES (?,?,?,?)
-    ")->execute([$name,$purchase_price,$sale_price,$quantity]);
-
-    $product_id = $pdo->lastInsertId();
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: index.php');
+    exit;
 }
 
-$pdo->prepare("
-    INSERT INTO purchases (product_id,quantity,price)
-    VALUES (?,?,?)
-")->execute([$product_id,$quantity,$purchase_price]);
+/* =====================
+   Récupération des données
+===================== */
+$product_id        = $_POST['product_id'] ?? null;
+$new_product_name  = trim($_POST['new_product_name'] ?? '');
+$purchase_price    = $_POST['purchase_price'] ?? 0;
+$sale_price        = $_POST['sale_price'] ?? 0;
+$quantity          = $_POST['quantity'] ?? 0;
 
-$pdo->commit();
+/* =====================
+   Vérifications
+===================== */
+if (
+    (empty($product_id) && empty($new_product_name)) ||
+    $purchase_price <= 0 ||
+    $sale_price <= 0 ||
+    $quantity <= 0
+) {
+    die("❌ Données invalides");
+}
 
-header("Location: stock.php");
+try {
+    $pdo->beginTransaction();
+
+    /* =====================
+       CAS 1 : Nouveau produit
+    ===================== */
+    if (empty($product_id)) {
+
+        // Création du produit
+        $stmt = $pdo->prepare("
+            INSERT INTO products (name, sale_price, stock)
+            VALUES (?, ?, ?)
+        ");
+        $stmt->execute([
+            $new_product_name,
+            $sale_price,
+            $quantity
+        ]);
+
+        $product_id = $pdo->lastInsertId();
+
+    } 
+    /* =====================
+       CAS 2 : Produit existant
+    ===================== */
+    else {
+
+        // Mise à jour du stock et du prix de vente
+        $stmt = $pdo->prepare("
+            UPDATE products 
+            SET 
+              stock = stock + ?, 
+              sale_price = ?
+            WHERE id = ?
+        ");
+        $stmt->execute([
+            $quantity,
+            $sale_price,
+            $product_id
+        ]);
+    }
+
+    /* =====================
+       Enregistrement de l'achat
+    ===================== */
+    $stmt = $pdo->prepare("
+        INSERT INTO purchases (product_id, price, quantity, created_at)
+        VALUES (?, ?, ?, NOW())
+    ");
+    $stmt->execute([
+        $product_id,
+        $purchase_price,
+        $quantity
+    ]);
+
+    $pdo->commit();
+
+    header("Location: purchases_list.php?success=1");
+    exit;
+
+} catch (Exception $e) {
+    $pdo->rollBack();
+    die("❌ Erreur achat : " . $e->getMessage());
+}
